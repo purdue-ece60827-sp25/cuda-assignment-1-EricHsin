@@ -1,0 +1,7 @@
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/CMakeFiles/lab1.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/CMakeFiles/edit_cache.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/CMakeFiles/rebuild_cache.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/src/CMakeFiles/cudaLib.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/src/CMakeFiles/cpuLib.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/src/CMakeFiles/edit_cache.dir
+/home/thsin/ECE60827/cuda-assignment-1-EricHsin/src/CMakeFiles/rebuild_cache.dir

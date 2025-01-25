@@ -13,6 +13,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 __global__ 
 void saxpy_gpu (float* x, float* y, float scale, int size) {
 	//	Insert GPU SAXPY kernel code here
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+
+	for(int i = idx; i < size; i+=stride){
+		y[i] = scale * x[i] + y[i];
+	}
+
 }
 
 int runGpuSaxpy(int vectorSize) {
@@ -20,8 +27,47 @@ int runGpuSaxpy(int vectorSize) {
 	std::cout << "Hello GPU Saxpy!\n";
 
 	//	Insert code here
-	std::cout << "Lazy, you are!\n";
-	std::cout << "Write code, you must\n";
+	
+	size_t size = vectorSize * sizeof(float);
+	float *device_x, *device_y, scale = 2.0f;
+
+	// Initialize host
+	std::vector<float> host_x(vectorSize);
+	std::vector<float> host_y(vectorSize);
+	std::vector<float> host_result(vectorSize);
+
+	// Initialize vector values (vector.data() returns pointer of the first data in the vector)
+	vectorInit(host_x.data(), vectorSize);
+	vectorInit(host_y.data(), vectorSize);
+
+	// Copy host_y data to host_result vector
+	std::memcpy(host_result.data(), host_y.data(), size);
+
+	// Malloc space for x and y in GPU, and use device_x, device_y pointers to point at them
+	gpuAssert(cudaMalloc((void **)&device_x, size), __FILE__, __LINE__);
+	gpuAssert(cudaMalloc((void **)&device_y, size), __FILE__, __LINE__);
+
+	// Copy the data from host to GPU
+	gpuAssert(cudaMemcpy( device_x, host_x.data(), size, cudaMemcpyHostToDevice), __FILE__, __LINE__);
+	gpuAssert(cudaMemcpy( device_y, host_result.data(), size, cudaMemcpyHostToDevice), __FILE__, __LINE__);
+
+	// Kernel setup
+	int threadsPerBlock = 256;
+    int blocksPerGrid = (vectorSize + threadsPerBlock - 1) / threadsPerBlock;
+
+	saxpy_gpu<<<blocksPerGrid, threadsPerBlock>>>(device_x, device_y, scale, vectorSize);
+
+	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
+
+	// Computation finished, copy the result from GPU to host
+	gpuAssert(cudaMemcpy(host_result.data(), device_y, size, cudaMemcpyDeviceToHost), __FILE__, __LINE__);
+
+	int errorCount = verifyVector(host_x.data(), host_y.data(), host_result.data(), scale, vectorSize);
+	std::cout << "Found " << errorCount << " / " << vectorSize << " errors \n";
+
+
+	gpuAssert(cudaFree(device_x), __FILE__, __LINE__);
+    gpuAssert(cudaFree(device_y), __FILE__, __LINE__);
 
 	return 0;
 }
