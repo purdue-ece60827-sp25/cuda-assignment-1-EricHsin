@@ -87,11 +87,42 @@ int runGpuSaxpy(int vectorSize) {
 __global__
 void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	//	Insert code here
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if(idx >= pSumSize) return;
+
+	int hit_count = 0;
+
+	curandState_t rng;
+	curand_init(clock64(), idx, 0, &rng);
+
+    int randInt = curand_uniform(&rng);
+
+	for(int i = 0; i < sampleSize; i++){
+		float x = curand_uniform(&rng);
+		float y = curand_uniform(&rng);
+
+		if((x*x) + (y*y) <= 1.0f){
+			++ hit_count;
+		}
+	}
+
+	pSums[idx] = hit_count;
+
 }
 
 __global__ 
 void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize) {
 	//	Insert code here
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if(idx >= reduceSize) return;
+
+	int sum = 0;
+
+	for (uint64_t i = idx * pSumSize; i < (idx+1) * pSumSize; i++) {
+        sum += pSums[i];
+    }
+
+	totals[idx] = sum;
 }
 
 int runGpuMCPi (uint64_t generateThreadCount, uint64_t sampleSize, 
@@ -125,8 +156,43 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	
 	double approxPi = 0;
 
-	//      Insert code here
-	std::cout << "Sneaky, you are ...\n";
-	std::cout << "Compute pi, you must!\n";
-	return approxPi;
+	// Insert code here
+	size_t generate_size = generateThreadCount * sizeof(uint64_t);
+	size_t reduce_size = reduceThreadCount * sizeof(uint64_t);
+	std::vector<uint64_t> host_total(reduceSize);
+	uint64_t *device_pSum = nullptr;
+	uint64_t *device_total = nullptr;
+	gpuAssert(cudaMalloc((void **)&device_pSum, generate_size), __FILE__, __LINE__);
+	gpuAssert(cudaMalloc((void **)&device_total, reduce_size), __FILE__, __LINE__);
+
+	// Kernel setup
+	int generateThreadsPerBlock = 256;
+    int gernerateBlocksPerGrid = (generateThreadCount + generateThreadsPerBlock - 1) / generateThreadsPerBlock;
+
+	generatePoints<<<gernerateBlocksPerGrid, generateThreadsPerBlock>>>(device_pSum, generateThreadCount, sampleSize);
+
+	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
+
+	// Kernel setup
+	int reduceThreadsPerBlock = 256;
+    int reduceBlocksPerGrid = (reduceThreadCount + reduceThreadsPerBlock - 1) / reduceThreadsPerBlock;
+
+	reduceCounts<<<reduceBlocksPerGrid, reduceThreadsPerBlock>>> (device_pSum, device_total, generateThreadCount, reduceSize);
+
+	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
+
+	// Computation finished, copy the result from GPU to host
+	gpuAssert(cudaMemcpy(host_total.data(), device_total, reduce_size, cudaMemcpyDeviceToHost), __FILE__, __LINE__);
+
+	uint64_t totalHitCount = 0;
+    for (uint64_t i = 0; i < reduceThreadCount; i++) {
+        totalHitCount += host_total[i];
+    }
+
+	approxPi = (((double)totalHitCount / (double)sampleSize) / (double)generateThreadCount) * 4.0f;
+
+	gpuAssert(cudaFree(device_pSum), __FILE__, __LINE__);
+    gpuAssert(cudaFree(device_total), __FILE__, __LINE__);
+
+    return approxPi;
 }
