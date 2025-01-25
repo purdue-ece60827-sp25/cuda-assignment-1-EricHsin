@@ -90,7 +90,7 @@ void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if(idx >= pSumSize) return;
 
-	int hit_count = 0;
+	uint64_t hit_count = 0;
 
 	curandState_t rng;
 	curand_init(clock64(), idx, 0, &rng);
@@ -116,7 +116,7 @@ void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint6
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if(idx >= reduceSize) return;
 
-	int sum = 0;
+	uint64_t sum = 0;
 
 	for (uint64_t i = idx * pSumSize; i < (idx+1) * pSumSize; i++) {
         sum += pSums[i];
