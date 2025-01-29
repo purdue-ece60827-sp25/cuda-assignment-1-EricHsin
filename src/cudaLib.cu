@@ -12,13 +12,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 
 __global__ 
 void saxpy_gpu (float* x, float* y, float scale, int size) {
-	//	Insert GPU SAXPY kernel code here
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	int stride = blockDim.x * gridDim.x;
-
-	for(int i = idx; i < size; i+=stride){
-		y[i] = scale * x[i] + y[i];
-	}
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i >= size) return;
+	
+	y[i] = scale * x[i] + y[i];
 
 }
 
