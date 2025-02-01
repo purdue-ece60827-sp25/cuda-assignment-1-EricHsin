@@ -16,15 +16,15 @@
 
 	// #define DEBUG_PRINT_DISABLE
 	
-	#define VECTOR_SIZE (1 << 20)
+	#define VECTOR_SIZE (1 << 16)
 
 	#define MC_SAMPLE_SIZE		1e8
 	#define MC_ITER_COUNT		32
 
 	#define WARP_SIZE			32
 	#define SAMPLE_SIZE			MC_SAMPLE_SIZE
-	#define GENERATE_BLOCKS		9000
-	#define REDUCE_SIZE			100
+	#define GENERATE_BLOCKS		4096
+	#define REDUCE_SIZE			64
 	#define REDUCE_BLOCKS		(GENERATE_BLOCKS / REDUCE_SIZE)
 
 #endif

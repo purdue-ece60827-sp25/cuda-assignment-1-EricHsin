@@ -49,9 +49,9 @@ int runGpuSaxpy(int vectorSize) {
 	gpuAssert(cudaMemcpy( device_y, host_result.data(), size, cudaMemcpyHostToDevice), __FILE__, __LINE__);
 
 	// Kernel setup
-	int threadsPerBlock = 256;
+	int threadsPerBlock = 128;
     int blocksPerGrid = (vectorSize + threadsPerBlock - 1) / threadsPerBlock;
-
+	
 	saxpy_gpu<<<blocksPerGrid, threadsPerBlock>>>(device_x, device_y, scale, vectorSize);
 
 	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
