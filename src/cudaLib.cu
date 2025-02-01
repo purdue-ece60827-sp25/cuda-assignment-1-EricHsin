@@ -106,17 +106,18 @@ void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	pSums[idx] = hit_count;
 
 }
-
 __global__ 
 void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize) {
 	//	Insert code here
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if(idx >= reduceSize) return;
+	uint64_t reduceThreadCount = pSumSize/reduceSize;
+
+	if(idx >= reduceThreadCount) return;
 
 	uint64_t sum = 0;
 
-	for (uint64_t i = idx * pSumSize; i < (idx+1) * pSumSize; i++) {
-        sum += pSums[i];
+	for (uint64_t i = 0; i < reduceSize; i++) {
+		sum += pSums[idx * reduceSize + i];
     }
 
 	totals[idx] = sum;
@@ -149,46 +150,43 @@ int runGpuMCPi (uint64_t generateThreadCount, uint64_t sampleSize,
 }
 
 double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize, 
-	uint64_t reduceThreadCount, uint64_t reduceSize) {
-	
-	double approxPi = 0;
+    uint64_t reduceThreadCount, uint64_t reduceSize) {
+    
+    double approxPi = 0.0;
 
-	// Insert code here
-	size_t generate_size = generateThreadCount * sizeof(uint64_t);
-	size_t reduce_size = reduceThreadCount * sizeof(uint64_t);
-	std::vector<uint64_t> host_total(reduceSize);
-	uint64_t *device_pSum = nullptr;
-	uint64_t *device_total = nullptr;
-	gpuAssert(cudaMalloc((void **)&device_pSum, generate_size), __FILE__, __LINE__);
-	gpuAssert(cudaMalloc((void **)&device_total, reduce_size), __FILE__, __LINE__);
+    // Allocate device memory for pSums and totals
+    size_t generate_size = generateThreadCount * sizeof(uint64_t);
+    size_t reduce_size = reduceThreadCount * sizeof(uint64_t);
+    std::vector<uint64_t> host_total(reduceThreadCount);
+    uint64_t *device_pSum = nullptr;
+    uint64_t *device_total = nullptr;
+    gpuAssert(cudaMalloc((void **)&device_pSum, generate_size), __FILE__, __LINE__);
+    gpuAssert(cudaMalloc((void **)&device_total, reduce_size), __FILE__, __LINE__);
 
-	// Kernel setup
-	int generateThreadsPerBlock = 256;
-    int gernerateBlocksPerGrid = (generateThreadCount + generateThreadsPerBlock - 1) / generateThreadsPerBlock;
+    // Kernel setup for generatePoints
+    dim3 DimGenerateGrid(ceil(generateThreadCount / 128.0), 1, 1);
+    dim3 DimGenerateBlock(128, 1, 1);
+    generatePoints<<<DimGenerateGrid, DimGenerateBlock>>>(device_pSum, generateThreadCount, sampleSize);
+    gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
 
-	generatePoints<<<gernerateBlocksPerGrid, generateThreadsPerBlock>>>(device_pSum, generateThreadCount, sampleSize);
+    // Kernel setup for reduceCounts
+    dim3 DimReduceGrid(ceil(reduceThreadCount / 128.0), 1, 1);
+    dim3 DimReduceBlock(128, 1, 1);
+    reduceCounts<<<DimReduceGrid, DimReduceBlock>>>(device_pSum, device_total, generateThreadCount, reduceSize);
+    gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
 
-	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
+    // Copy the result from GPU to host
+    gpuAssert(cudaMemcpy(host_total.data(), device_total, reduce_size, cudaMemcpyDeviceToHost), __FILE__, __LINE__);
 
-	// Kernel setup
-	int reduceThreadsPerBlock = 256;
-    int reduceBlocksPerGrid = (reduceThreadCount + reduceThreadsPerBlock - 1) / reduceThreadsPerBlock;
-
-	reduceCounts<<<reduceBlocksPerGrid, reduceThreadsPerBlock>>> (device_pSum, device_total, generateThreadCount, reduceSize);
-
-	gpuAssert(cudaDeviceSynchronize(), __FILE__, __LINE__);
-
-	// Computation finished, copy the result from GPU to host
-	gpuAssert(cudaMemcpy(host_total.data(), device_total, reduce_size, cudaMemcpyDeviceToHost), __FILE__, __LINE__);
-
-	uint64_t totalHitCount = 0;
+    uint64_t totalHitCount = 0;
     for (uint64_t i = 0; i < reduceThreadCount; i++) {
         totalHitCount += host_total[i];
     }
 
-	approxPi = (((double)totalHitCount / (double)sampleSize) / (double)generateThreadCount) * 4.0f;
+    approxPi = (static_cast<double>(totalHitCount) / 
+               (static_cast<double>(generateThreadCount) * static_cast<double>(sampleSize))) * 4.0;
 
-	gpuAssert(cudaFree(device_pSum), __FILE__, __LINE__);
+    gpuAssert(cudaFree(device_pSum), __FILE__, __LINE__);
     gpuAssert(cudaFree(device_total), __FILE__, __LINE__);
 
     return approxPi;
